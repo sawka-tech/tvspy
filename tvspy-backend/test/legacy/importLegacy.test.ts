@@ -238,4 +238,35 @@ describe('legacy import', () => {
     expect(report.classes.stream).toBe(15);
     expect(session(db, 1759500001)).toMatchObject({ quality: 'unclosed' });
   });
+
+  it('judges radio against radio bitrates, not TV, when a station has few sessions', async () => {
+    const radioPath = join(dir, 'radio.db');
+    const radio = (id: number, station: string, start: string, hours: number) => ({
+      id,
+      username: 'kapi',
+      channel: station,
+      hostname: '77.65.111.65',
+      client: 'SparkleTV/1.9.6 (AFTMM, Android 7.1.2)',
+      service: `IPTV #0/radio/${station}/${station}`,
+      title: 'HTTP',
+      total_in: Math.round((160_000 / 8) * 3600 * hours), // 0.16 Mbit/s
+      start: new Date(start).toISOString(),
+      end: new Date(Date.parse(start) + hours * 3_600_000).toISOString(),
+    });
+    createLegacyDb(radioPath, {
+      extraRows: [
+        radio(1761000001, '1Live', '2025-08-01T08:00:00Z', 1),
+        radio(1761000002, 'ESKA', '2025-08-02T08:00:00Z', 1),
+        radio(1761000003, 'VOX FM', '2025-08-03T08:00:00Z', 1),
+        radio(1761000004, 'Kisstory', '2025-08-04T08:00:00Z', 1),
+        radio(1761000005, 'Radio Kampus', '2025-08-05T08:00:00Z', 1),
+        radio(1761000006, 'sunshine live house', '2025-08-06T08:00:00Z', 2),
+      ],
+    });
+    const db = freshDb();
+    await importLegacy(db, radioPath, { tz: WAW, now: NOW, repair: true });
+    const listen = session(db, 1761000006);
+    expect(listen.quality).toBeNull();
+    expect((listen.ended_at as number) - listen.started_at).toBe(7200);
+  });
 });

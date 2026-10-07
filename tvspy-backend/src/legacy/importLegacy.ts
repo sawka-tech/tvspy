@@ -127,6 +127,7 @@ export async function importLegacy(db: DB, legacyPath: string, opts: ImportOptio
       const end = parseLegacyTime(row.end);
       return {
         channel: row.channel,
+        network: parseService(row.service).network,
         seconds: end !== null && start !== null ? end - start : 0,
         bytes: row.total_in ?? 0,
       };

@@ -1,6 +1,6 @@
 // Pure classification of legacy tvspy "registries" rows.
 
-import { isRecordingTitle } from '../core/tvhParse.js';
+import { isRecordingTitle, parseService } from '../core/tvhParse.js';
 
 export interface LegacyRow {
   id: number;
@@ -57,34 +57,56 @@ export function outcomeOf(durationSec: number, bytes: number): 'ok' | 'failed' {
   return durationSec >= FAILED_MIN_SECONDS && bytes < FAILED_MAX_BYTES ? 'failed' : 'ok';
 }
 
-/** Typical bitrates in bits per second, used to repair legacy durations from their byte counts. */
+export interface BitrateSample {
+  channel: string | null;
+  /** TVH network from the service name ("dvb-t", "radio", …). */
+  network: string | null;
+  seconds: number;
+  bytes: number;
+}
+
+/**
+ * Typical bitrates in bits per second, used to repair legacy durations from their byte counts. A channel
+ * with too few samples falls back to its network (radio streams are ~0.16 Mbit/s, DVB-T TV ~4.7), then to
+ * the overall median.
+ */
 export class BitrateModel {
   private readonly perChannel = new Map<string, number>();
+  private readonly perNetwork = new Map<string, number>();
   private readonly global: number;
 
-  constructor(samples: readonly { channel: string | null; seconds: number; bytes: number }[]) {
+  constructor(samples: readonly BitrateSample[]) {
     const byChannel = new Map<string, number[]>();
+    const byNetwork = new Map<string, number[]>();
     const all: number[] = [];
+    const add = (map: Map<string, number[]>, key: string, value: number) => {
+      const list = map.get(key);
+      if (list) list.push(value);
+      else map.set(key, [value]);
+    };
     for (const s of samples) {
       if (s.seconds < 60 || s.bytes < 1_000_000) continue;
       const bps = (s.bytes * 8) / s.seconds;
       all.push(bps);
-      const key = s.channel ?? '';
-      const list = byChannel.get(key);
-      if (list) list.push(bps);
-      else byChannel.set(key, [bps]);
+      add(byChannel, s.channel ?? '', bps);
+      if (s.network) add(byNetwork, s.network, bps);
     }
     for (const [channel, list] of byChannel) if (list.length >= 5) this.perChannel.set(channel, median(list));
+    for (const [network, list] of byNetwork) if (list.length >= 5) this.perNetwork.set(network, median(list));
     this.global = all.length > 0 ? median(all) : 4_000_000;
   }
 
-  bitrate(channel: string | null): number {
-    return this.perChannel.get(channel ?? '') ?? this.global;
+  bitrate(channel: string | null, network: string | null): number {
+    return (
+      this.perChannel.get(channel ?? '') ??
+      (network ? this.perNetwork.get(network) : undefined) ??
+      this.global
+    );
   }
 
   /** Seconds that `bytes` would take at the channel's typical bitrate. */
-  secondsFor(channel: string | null, bytes: number): number {
-    return Math.max(1, Math.round((bytes * 8) / this.bitrate(channel)));
+  secondsFor(channel: string | null, network: string | null, bytes: number): number {
+    return Math.max(1, Math.round((bytes * 8) / this.bitrate(channel, network)));
   }
 }
 
@@ -116,6 +138,9 @@ export function legacyTiming(
   const startedAt = parseLegacyTime(row.start) as number;
   const end = parseLegacyTime(row.end);
   const bytes = Math.max(0, row.total_in ?? 0);
+  const network = parseService(row.service).network;
+  const typicalEnd = () =>
+    Math.min(startedAt + model.secondsFor(row.channel, network, bytes), Math.max(startedAt, opts.openUntil));
 
   if (end === null) {
     // Still in flight when the old app stopped (fork rows have a sub_key): leave open for the live tracker.
@@ -126,29 +151,13 @@ export function legacyTiming(
 
   const seconds = end - startedAt;
   if (seconds === 0 && bytes >= 5_000_000) {
-    return {
-      startedAt,
-      endedAt: Math.min(
-        startedAt + model.secondsFor(row.channel, bytes),
-        Math.max(startedAt, opts.openUntil),
-      ),
-      quality: 'end_estimated',
-      adjusted: true,
-    };
+    return { startedAt, endedAt: typicalEnd(), quality: 'end_estimated', adjusted: true };
   }
   if (seconds >= 30 && bytes >= 1_000_000) {
-    const ratio = (bytes * 8) / seconds / model.bitrate(row.channel);
+    const ratio = (bytes * 8) / seconds / model.bitrate(row.channel, network);
     if (ratio > 4 || ratio < 0.25) {
       if (!opts.repair) return { startedAt, endedAt: end, quality: 'end_suspect', adjusted: false };
-      return {
-        startedAt,
-        endedAt: Math.min(
-          startedAt + model.secondsFor(row.channel, bytes),
-          Math.max(startedAt, opts.openUntil),
-        ),
-        quality: 'end_suspect',
-        adjusted: true,
-      };
+      return { startedAt, endedAt: typicalEnd(), quality: 'end_suspect', adjusted: true };
     }
   }
   return { startedAt, endedAt: end, quality: null, adjusted: false };
