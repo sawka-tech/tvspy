@@ -6,4 +6,5 @@ export const API_ENDPOINTS: {
     CONFIG_LANGUAGE: string;
     DEBUG_MODE: string;
     STATISTICS: string;
+    LIVE: string;
 };

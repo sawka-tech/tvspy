@@ -67,6 +67,7 @@ const initializeDatabase = async () => {
         `);
 
         //await updateRegistriesTable();
+        await migrateSessionKeys();
         await insertDefaultConfigData();
     } catch (err) {
         console.error('Error initializing database:', err.message);
@@ -121,6 +122,26 @@ const insertDefaultConfigData = async () => {
 };
 
 
+// Sessions are identified by "<start>-<TVHeadend subscription id>" (sub_key). Older versions used the
+// start second as the row id, so sessions starting in the same second collided.
+const migrateSessionKeys = async () => {
+    const columns = (await getSql('PRAGMA table_info(registries)')).map(col => col.name);
+    if (!columns.includes('sub_key')) {
+        await runSql('ALTER TABLE registries ADD COLUMN sub_key TEXT');
+        console.log('Column "sub_key" added to "registries" table.');
+    }
+    await runSql('CREATE UNIQUE INDEX IF NOT EXISTS idx_registries_sub_key ON registries(sub_key)');
+
+    // Sessions from the old tracker that were never closed (it stopped receiving data after
+    // TVHeadend restarts). Their real end is unknown: close them with zero duration so they
+    // neither stay "open" forever nor inflate the statistics.
+    const stale = await getSql('SELECT COUNT(*) AS n FROM registries WHERE end IS NULL AND sub_key IS NULL');
+    if (stale[0].n > 0) {
+        await runSql('UPDATE registries SET end = start WHERE end IS NULL AND sub_key IS NULL');
+        console.log(`Closed ${stale[0].n} unfinished session(s) left by the previous version.`);
+    }
+};
+
 const updateRegistriesTable = async () => {
     try {
         // Verificar si las columnas ya existen
@@ -147,6 +168,7 @@ const updateRegistriesTable = async () => {
 };
 
 // Ejecutar la inicialización de la base de datos
-initializeDatabase();
+// db.ready resolves once tables and migrations are in place.
+db.ready = initializeDatabase();
 
 module.exports = db;
