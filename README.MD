@@ -48,15 +48,26 @@ services:
 
 ### First start
 
-1. Open the app. It asks for a **setup code**, which is printed in the container log (`docker logs tvspy`).
-   Then choose the admin user name and password.
+1. Open the app from your home network, by IP address (for example `http://192.168.1.10:8183`). No login is
+   needed there.
 2. In **Settings → TVHeadend**, enter its address (for example `http://192.168.1.10:9981`) and an account with
    **admin rights**. tvspy reads TVHeadend's status pages, which require admin. **Test connection** shows the version,
    the tuners and the number of channels it found.
 3. In **Settings → Telegram**, optionally add a bot token (from @BotFather) and your chat ID, then send a test
    message.
 
-Keep tvspy on your home network or VPN. It needs no port forwarding.
+### Access
+
+- **Without a login:** tvspy opens from the networks in **Settings → Access**. The defaults are `192.168.0.0/16`
+  (home networks) and `10.0.0.0/8` (typical VPNs).
+- **Docker range left out:** `172.16.0.0/12` is not in the defaults on purpose. A reverse proxy container (for
+  example Nginx Proxy Manager) connects from there and must not get around the login.
+- **Other networks:** tvspy refuses them unless you set a password under Settings → Access. With a password, it
+  asks for it.
+- **Host names:** open it by IP address. A host name such as `tower.local` gets in without a login only after you
+  list it under Settings → Access. This stops malicious websites that point their own name at your server (DNS
+  rebinding).
+- **Forgotten password:** run `docker exec -it tvspy node dist/cli.js set-password`.
 
 Do not enable TVHeadend's "use X-Forwarded-For" proxy option. With it, any client can fake its address. Clients
 coming through an HTTPS proxy show up as "HTTPS proxy" instead of with an address.
@@ -95,7 +106,7 @@ Backups contain the TVHeadend password and the Telegram token, like the database
 Commands, run inside the container:
 
 ```bash
-docker exec -it tvspy node dist/cli.js set-password   # forgotten password: set a new one, log out everywhere
+docker exec -it tvspy node dist/cli.js set-password   # set or reset the password for other networks
 docker exec tvspy node dist/cli.js backup             # an extra backup now
 ```
 

@@ -1,7 +1,8 @@
-// The single admin account and its browser sessions. The cookie carries a random token; the database
-// stores only its SHA-256, so a copy of the database (or a backup) cannot be used to log in.
+// The optional password for opening tvspy from networks that are not trusted (Settings → Access), and the
+// browser sessions it creates. The cookie carries a random token; the database stores only its SHA-256, so
+// a copy of the database (or a backup) cannot be used to log in.
 
-import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { DB } from '../db/open.js';
 import { DEFAULT_SCRYPT_COST, hashPassword, verifyPassword } from './password.js';
 
@@ -9,7 +10,6 @@ export const SESSION_COOKIE = 'tvspy_session';
 export const SESSION_DAYS = 30;
 /** Sliding expiry is renewed at most this often, to avoid a write on every request. */
 const RENEW_AFTER_SEC = 300;
-const SETUP_ALPHABET = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
 
 export const USERNAME_MAX = 64;
 export const PASSWORD_MIN = 8;
@@ -17,7 +17,7 @@ export const PASSWORD_MAX = 200;
 
 export class AuthError extends Error {
   constructor(
-    readonly reason: 'bad_setup_code' | 'already_set_up' | 'bad_credentials' | 'weak_password',
+    readonly reason: 'bad_credentials' | 'weak_password',
     message: string,
   ) {
     super(message);
@@ -36,14 +36,6 @@ interface AdminRow {
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 
-export function generateSetupCode(): string {
-  const pick = () => SETUP_ALPHABET[randomInt(SETUP_ALPHABET.length)];
-  const group = () => Array.from({ length: 4 }, pick).join('');
-  return `${group()}-${group()}`;
-}
-
-const normalizeCode = (code: string) => code.toUpperCase().replace(/[^A-Z0-9]/g, '');
-
 export function checkPasswordPolicy(password: string): string | null {
   if (password.length < PASSWORD_MIN) return `Use at least ${PASSWORD_MIN} characters`;
   if (password.length > PASSWORD_MAX) return `Use at most ${PASSWORD_MAX} characters`;
@@ -51,17 +43,13 @@ export function checkPasswordPolicy(password: string): string | null {
 }
 
 export class AuthService {
-  /** Printed to the log on startup while no admin exists; required to create the admin. */
-  private setupCode: string | null = null;
   /** Hash used for logins with an unknown user name, so they take as long as real ones. */
   private dummyHash: Promise<string> | null = null;
 
   constructor(
     private readonly db: DB,
     private readonly opts: { scryptCost?: number; now?: () => number } = {},
-  ) {
-    if (this.setupRequired()) this.setupCode = generateSetupCode();
-  }
+  ) {}
 
   private now(): number {
     return this.opts.now ? this.opts.now() : Math.floor(Date.now() / 1000);
@@ -73,37 +61,13 @@ export class AuthService {
       | undefined;
   }
 
-  setupRequired(): boolean {
-    return this.admin() === undefined;
+  /** Whether a password is set, i.e. logging in from other networks is possible. */
+  hasAdmin(): boolean {
+    return this.admin() !== undefined;
   }
 
-  /** The current setup code, or null once the admin exists. */
-  pendingSetupCode(): string | null {
-    if (!this.setupRequired()) return null;
-    if (!this.setupCode) this.setupCode = generateSetupCode();
-    return this.setupCode;
-  }
-
-  async setup(code: string, username: string, password: string, meta: ClientMeta): Promise<string> {
-    if (!this.setupRequired()) throw new AuthError('already_set_up', 'The admin account already exists');
-    const expected = Buffer.from(normalizeCode(this.pendingSetupCode() ?? ''));
-    const given = Buffer.from(normalizeCode(code));
-    if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
-      throw new AuthError('bad_setup_code', 'Wrong setup code; find it in the container log');
-    }
-    const policy = checkPasswordPolicy(password);
-    if (policy) throw new AuthError('weak_password', policy);
-    const hash = await hashPassword(password, this.opts.scryptCost ?? DEFAULT_SCRYPT_COST);
-    const now = this.now();
-    const created = this.db
-      .prepare(
-        `INSERT OR IGNORE INTO admin_user (id, username, password_hash, created_at, password_changed_at)
-         VALUES (1, ?, ?, ?, ?)`,
-      )
-      .run(username.trim(), hash, now, now);
-    if (created.changes === 0) throw new AuthError('already_set_up', 'The admin account already exists');
-    this.setupCode = null;
-    return this.createSession(meta);
+  adminName(): string | null {
+    return this.admin()?.username ?? null;
   }
 
   async login(username: string, password: string, meta: ClientMeta): Promise<string> {
@@ -186,7 +150,7 @@ export class AuthService {
     })();
   }
 
-  /** Creates or replaces the admin (command-line recovery) and ends all browser sessions. */
+  /** Sets or replaces the password (from a trusted network or the command line); ends all sessions. */
   async setPassword(username: string, password: string): Promise<void> {
     const policy = checkPasswordPolicy(password);
     if (policy) throw new AuthError('weak_password', policy);
@@ -203,7 +167,14 @@ export class AuthService {
         .run(username.trim(), hash, now, now);
       this.db.prepare('DELETE FROM auth_sessions').run();
     })();
-    this.setupCode = null;
+  }
+
+  /** Removes the password: tvspy then only opens from trusted networks. */
+  removeAdmin(): void {
+    this.db.transaction(() => {
+      this.db.prepare('DELETE FROM admin_user').run();
+      this.db.prepare('DELETE FROM auth_sessions').run();
+    })();
   }
 
   pruneExpired(): number {

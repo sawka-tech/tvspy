@@ -5,14 +5,26 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { messages } from '../../alerts/messages.js';
 import { sendTelegram } from '../../alerts/telegram.js';
+import { inAny } from '../../core/ip.js';
 import type { SettingKey } from '../../settings/schema.js';
 import { SettingsValidationError } from '../../settings/store.js';
 import { fetchChannels, fetchInputs, fetchServerInfo } from '../../tvh/api.js';
 import { TvhClient, TvhError } from '../../tvh/client.js';
-import { ApiError, type AppDeps, type AppEnv, readJson } from '../support.js';
+import {
+  ApiError,
+  type AppDeps,
+  type AppEnv,
+  clientIp,
+  displayIp,
+  hostOf,
+  isTrusted,
+  readJson,
+} from '../support.js';
 
 /** API path → stored key. */
 const KEYS = {
+  'access.openNetworks': 'access.openNetworks',
+  'access.hostnames': 'access.hostnames',
   'tvh.url': 'tvh.url',
   'tvh.username': 'tvh.username',
   'tvh.password': 'tvh.password',
@@ -44,6 +56,10 @@ const API_PATH = Object.fromEntries(Object.entries(KEYS).map(([path, key]) => [k
 // Shapes only; values are validated by the settings schema. Unknown fields are rejected.
 const secret = z.string().max(500).nullable();
 const patchSchema = z.strictObject({
+  access: z
+    .strictObject({ openNetworks: z.array(z.string()), hostnames: z.array(z.string()) })
+    .partial()
+    .optional(),
   tvh: z.strictObject({ url: z.string(), username: z.string(), password: secret }).partial().optional(),
   telegram: z
     .strictObject({ enabled: z.boolean(), chatId: z.string(), botToken: secret })
@@ -86,6 +102,7 @@ function flatten(obj: Record<string, unknown>, prefix = ''): [string, unknown][]
 export function apiSettings(d: AppDeps): Settings {
   const s = d.settings;
   return {
+    access: { openNetworks: [...s.get('access.openNetworks')], hostnames: [...s.get('access.hostnames')] },
     tvh: { url: s.get('tvh.url'), username: s.get('tvh.username'), passwordSet: s.isSet('tvh.password') },
     telegram: {
       enabled: s.get('telegram.enabled'),
@@ -143,6 +160,37 @@ export function settingsRoutes(d: AppDeps): Hono<AppEnv> {
       throw new ApiError(400, 'VALIDATION', 'Invalid settings', {
         'monitoring.snrCriticalDb': 'Must be lower than the "good" threshold',
       });
+    }
+    // Changing who may skip the login must not shut out the browser making the change.
+    if (c.get('trusted') && (changes['access.openNetworks'] || changes['access.hostnames'])) {
+      const ip = clientIp(c);
+      const nets = (changes['access.openNetworks'] ?? d.settings.get('access.openNetworks')) as string[];
+      const names = (changes['access.hostnames'] ?? d.settings.get('access.hostnames')) as string[];
+      const valid = (list: unknown) =>
+        Array.isArray(list) && list.every((v) => typeof v === 'string' && v.length > 0);
+      if (
+        valid(nets) &&
+        valid(names) &&
+        !isTrusted(
+          ip,
+          c.req.header('host'),
+          nets.map((n) => n.trim()),
+          names.map((n) => n.trim().toLowerCase()),
+        )
+      ) {
+        const field = inAny(
+          ip,
+          nets.map((n) => n.trim()),
+        )
+          ? 'access.hostnames'
+          : 'access.openNetworks';
+        throw new ApiError(400, 'VALIDATION', 'Invalid settings', {
+          [field]:
+            field === 'access.openNetworks'
+              ? `This would lock you out: your address ${displayIp(ip)} is not in the list`
+              : `This would lock you out: you opened tvspy as "${hostOf(c.req.header('host'))}", which is not in the list`,
+        });
+      }
     }
     try {
       const changed = d.settings.update(changes, d.now());

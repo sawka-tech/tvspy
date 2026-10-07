@@ -15,6 +15,18 @@ const tvhUrl = z
   .trim()
   .refine((s) => s === '' || /^https?:\/\/[^\s/?#]+(\/[^\s?#]*)?$/i.test(s), 'Use http(s)://host:port');
 
+const hostname = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^(?=.{1,253}$)[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/, 'Not a host name');
+
+/**
+ * Private networks of a home LAN and typical VPNs. The Docker range 172.16.0.0/12 is left out on purpose:
+ * requests through a reverse proxy container come from there and must not skip the login.
+ */
+export const DEFAULT_OPEN_NETWORKS = ['192.168.0.0/16', '10.0.0.0/8'];
+
 const flag = (value: boolean) => ({ schema: z.boolean(), default: value });
 
 interface SettingDef {
@@ -25,6 +37,9 @@ interface SettingDef {
 }
 
 export const SETTINGS = {
+  'access.openNetworks': { schema: cidrList, default: DEFAULT_OPEN_NETWORKS },
+  'access.hostnames': { schema: z.array(hostname).max(20), default: [] as string[] },
+
   'tvh.url': { schema: tvhUrl, default: '' },
   'tvh.username': { schema: z.string().trim().max(200), default: '' },
   'tvh.password': { schema: z.string().max(500), default: '', secret: true },

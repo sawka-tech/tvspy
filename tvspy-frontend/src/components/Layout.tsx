@@ -130,15 +130,17 @@ export function Layout() {
           <div className="ml-auto flex items-center gap-1.5">
             <TvhStatus />
             <ThemeButton />
-            <button
-              type="button"
-              onClick={() => logout.mutate()}
-              title={auth.data?.username ? `Log out ${auth.data.username}` : 'Log out'}
-              aria-label="Log out"
-              className="rounded-md p-2 text-ink-2 hover:bg-surface-2 hover:text-ink"
-            >
-              <LogOut className="size-4" aria-hidden />
-            </button>
+            {auth.data?.username && (
+              <button
+                type="button"
+                onClick={() => logout.mutate()}
+                title={`Log out ${auth.data.username}`}
+                aria-label="Log out"
+                className="rounded-md p-2 text-ink-2 hover:bg-surface-2 hover:text-ink"
+              >
+                <LogOut className="size-4" aria-hidden />
+              </button>
+            )}
           </div>
         </div>
         <nav

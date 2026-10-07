@@ -13,7 +13,6 @@ import type {
   Sessions,
   Settings,
   SettingsPatch,
-  SetupRequest,
   Status,
   TelegramTestRequest,
   TestResult,
@@ -109,27 +108,34 @@ export function useLogin() {
   });
 }
 
-export function useSetup() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: SetupRequest) => api<AuthState>('POST', '/api/auth/setup', body),
-    onSuccess: (state) => qc.setQueryData(keys.auth, state),
-  });
-}
-
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api<AuthState>('POST', '/api/auth/logout'),
     onSettled: () => {
       qc.clear();
-      qc.setQueryData(keys.auth, { authenticated: false, setupRequired: false, username: null });
+      void qc.invalidateQueries({ queryKey: keys.auth });
     },
   });
 }
 
-export const useChangePassword = () =>
-  useMutation({ mutationFn: (body: PasswordChangeRequest) => api<void>('PUT', '/api/auth/password', body) });
+/** Sets or changes the password for access from other networks. */
+export function useSavePassword() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PasswordChangeRequest) => api<void>('PUT', '/api/auth/password', body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.auth }),
+  });
+}
+
+/** Removes the password: tvspy then only opens from the trusted networks. */
+export function useRemovePassword() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<void>('DELETE', '/api/auth/password'),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.auth }),
+  });
+}
 
 export function useSaveSettings() {
   const qc = useQueryClient();

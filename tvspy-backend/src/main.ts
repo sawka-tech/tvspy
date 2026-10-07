@@ -73,9 +73,10 @@ async function main(): Promise<void> {
     telegramAllowed: env.telegramEnabled,
     publicDir: env.publicDir,
   });
-  const setupCode = services.auth.pendingSetupCode();
-  if (setupCode)
-    log.info(`No admin account yet. Open tvspy in the browser and enter the setup code ${setupCode}`);
+  log.info(
+    `Opens without login from ${settings.get('access.openNetworks').join(', ')}` +
+      (services.auth.hasAdmin() ? '; password login for other networks' : '; other networks are refused'),
+  );
   if (!env.telegramEnabled) log.info('Telegram is switched off for this container (TVSPY_TELEGRAM=off)');
   if (services.tracker.open.size > 0) log.info(`Resuming ${services.tracker.open.size} open session(s)`);
 

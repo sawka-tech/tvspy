@@ -36,9 +36,16 @@ export interface Page<T> {
 // --- Auth -------------------------------------------------------------------------------------------
 
 export interface AuthState {
+  /** May use the app: opened from a trusted network, or logged in with the password. */
   authenticated: boolean;
-  setupRequired: boolean;
+  /** Opened from a network that needs no login (Settings → Access). */
+  trustedNetwork: boolean;
+  /** A password is set, so logging in from other networks is possible. */
+  loginAvailable: boolean;
+  /** Set when logged in with the password. */
   username: string | null;
+  /** The address tvspy sees for this browser. */
+  address: string | null;
 }
 
 export interface LoginRequest {
@@ -46,14 +53,13 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface SetupRequest {
-  setupCode: string;
-  username: string;
-  password: string;
-}
-
+/**
+ * Sets the password for access from other networks. From a trusted network no current password is
+ * needed (and the user name may change); when logged in from elsewhere, currentPassword is required.
+ */
 export interface PasswordChangeRequest {
-  currentPassword: string;
+  username?: string;
+  currentPassword?: string;
   newPassword: string;
 }
 
@@ -214,6 +220,8 @@ export type Alerts = Page<AlertLogEntry>;
 // --- Settings ---------------------------------------------------------------------------------------
 
 export interface Settings {
+  /** Networks that open tvspy without login, and host names besides IP addresses that count for them. */
+  access: { openNetworks: string[]; hostnames: string[] };
   tvh: { url: string; username: string; passwordSet: boolean };
   telegram: {
     enabled: boolean;
@@ -241,6 +249,7 @@ export interface Settings {
 }
 
 export interface SettingsPatch {
+  access?: Partial<Settings['access']>;
   tvh?: Partial<{ url: string; username: string; password: string | null }>;
   telegram?: Partial<{ enabled: boolean; chatId: string; botToken: string | null }>;
   monitoring?: Partial<Settings['monitoring']>;

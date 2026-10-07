@@ -12,13 +12,15 @@ import type { LogoCache } from '../collect/logos.js';
 import type { SessionTracker } from '../collect/sessions.js';
 import type { TunerMonitor } from '../collect/tuners.js';
 import type { TvhState } from '../collect/tvhState.js';
+import { inAny, isIp } from '../core/ip.js';
 import type { DB } from '../db/open.js';
 import type { Logger } from '../log.js';
 import type { SettingsStore } from '../settings/store.js';
 
 export type AppEnv = {
   Bindings: { incoming?: IncomingMessage };
-  Variables: { username: string; token: string };
+  /** Set by the access guard: trusted network, and the password login (if any). */
+  Variables: { trusted: boolean; username: string | null; token: string | null };
 };
 
 export interface AppDeps {
@@ -91,6 +93,46 @@ export function readQuery<S extends z.ZodType>(c: Context<AppEnv>, schema: S): z
 
 export function clientIp(c: Context<AppEnv>): string {
   return c.env?.incoming?.socket?.remoteAddress ?? 'unknown';
+}
+
+/** "::ffff:192.168.1.20" (how Node reports IPv4 on a dual-stack socket) → "192.168.1.20". */
+export const displayIp = (ip: string) => (/^::ffff:\d+\.\d+\.\d+\.\d+$/i.test(ip) ? ip.slice(7) : ip);
+
+/** Host name of the Host header without the port; IPv6 literals without brackets. */
+export function hostOf(header: string | undefined): string | null {
+  if (!header) return null;
+  const h = header.trim().toLowerCase();
+  if (h.startsWith('[')) return h.slice(1, h.indexOf(']') > 0 ? h.indexOf(']') : undefined);
+  return h.replace(/:\d+$/, '');
+}
+
+/**
+ * Whether a request may skip the login: it comes from an open network AND addresses tvspy by IP address,
+ * localhost, or a listed host name. The host check stops DNS rebinding, where a website points its own
+ * name at tvspy's address to get the browser through.
+ */
+export function isTrusted(
+  ip: string,
+  hostHeader: string | undefined,
+  openNetworks: readonly string[],
+  hostnames: readonly string[],
+): boolean {
+  if (!inAny(ip, openNetworks)) return false;
+  const host = hostOf(hostHeader);
+  return host !== null && (isIp(host) || host === 'localhost' || hostnames.includes(host));
+}
+
+export function clientAccess(c: Context<AppEnv>, d: AppDeps): { ip: string; trusted: boolean } {
+  const ip = clientIp(c);
+  return {
+    ip,
+    trusted: isTrusted(
+      ip,
+      c.req.header('host'),
+      d.settings.get('access.openNetworks'),
+      d.settings.get('access.hostnames'),
+    ),
+  };
 }
 
 export const iso = (t: number | null | undefined): string | null =>

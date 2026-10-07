@@ -51,8 +51,6 @@ describe('monitor against a TVHeadend', () => {
     // One challenge, then every request is authenticated.
     expect(tvh.state.requests.filter((r) => r.authorization === null)).toHaveLength(1);
     expect(tvh.state.requests.filter((r) => r.authorization?.startsWith('Digest '))).toHaveLength(6);
-
-    await h.login();
     const live = (await (await h.call('GET', '/api/live')).json()) as Live;
     expect(live.sessions[0]?.channel).toEqual({ id: CH_TVP1, name: 'TVP1' });
 

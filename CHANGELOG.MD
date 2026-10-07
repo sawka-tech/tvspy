@@ -4,7 +4,7 @@
 
 A rewrite in TypeScript (backend: Hono and SQLite; frontend: React), shipped as one smaller container.
 
-- Login for a single admin, set up with a code from the container log.
+- Opens without login from your home network and VPN; optional password for other networks.
 - Live view with logos, multiplex, tuner, app and device, connection type and data rate, plus each tuner's
   reception (signal-to-noise) over the last 15 minutes.
 - History with server-side filters and paging; channel changes count as one visit.

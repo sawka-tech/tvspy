@@ -120,31 +120,74 @@ function serve(auth: AuthState, extra: Record<string, unknown> = {}) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('app', () => {
-  it('asks for the setup code before anything else', async () => {
+  it('opens straight away on the home network', async () => {
+    serve({
+      authenticated: true,
+      trustedNetwork: true,
+      loginAvailable: false,
+      username: null,
+      address: '192.168.1.20',
+    });
+    render(<App client={createQueryClient()} />);
+    expect(await screen.findByRole('heading', { name: 'Live' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Log out' })).toBeNull();
+  });
+
+  it('explains that tvspy only opens at home when no password is set', async () => {
+    serve({
+      authenticated: false,
+      trustedNetwork: false,
+      loginAvailable: false,
+      username: null,
+      address: '203.0.113.7',
+    });
+    render(<App client={createQueryClient()} />);
+    expect(await screen.findByRole('heading', { name: 'Only on your home network' })).toBeTruthy();
+    expect(screen.getByText(/203\.0\.113\.7/)).toBeTruthy();
+    expect(screen.queryByLabelText('Password')).toBeNull();
+  });
+
+  it('asks for the password outside the home network when one is set', async () => {
     const calls = serve(
-      { authenticated: false, setupRequired: true, username: null },
-      { 'POST /api/auth/setup': { authenticated: true, setupRequired: false, username: 'kacper' } },
+      {
+        authenticated: false,
+        trustedNetwork: false,
+        loginAvailable: true,
+        username: null,
+        address: '203.0.113.7',
+      },
+      {
+        'POST /api/auth/login': {
+          authenticated: true,
+          trustedNetwork: false,
+          loginAvailable: true,
+          username: 'kacper',
+          address: '203.0.113.7',
+        },
+      },
     );
     render(<App client={createQueryClient()} />);
-    expect(await screen.findByRole('heading', { name: 'Create the admin account' })).toBeTruthy();
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText('Setup code'), 'abcd-efgh');
-    await user.type(screen.getByLabelText('User name'), 'kacper');
+    await user.type(await screen.findByLabelText('User name'), 'kacper');
     await user.type(screen.getByLabelText('Password'), 'long enough pw');
-    await user.type(screen.getByLabelText('Repeat password'), 'long enough pw');
-    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    await user.click(screen.getByRole('button', { name: 'Log in' }));
     await waitFor(() =>
-      expect(calls.some((c) => c.method === 'POST' && c.path === '/api/auth/setup')).toBe(true),
+      expect(calls.some((c) => c.method === 'POST' && c.path === '/api/auth/login')).toBe(true),
     );
-    expect(calls.find((c) => c.path === '/api/auth/setup')?.body).toEqual({
-      setupCode: 'abcd-efgh',
+    expect(calls.find((c) => c.path === '/api/auth/login')?.body).toEqual({
       username: 'kacper',
       password: 'long enough pw',
     });
   });
 
   it('shows the live view with streams and tuners once logged in', async () => {
-    serve({ authenticated: true, setupRequired: false, username: 'kacper' });
+    serve({
+      authenticated: true,
+      trustedNetwork: true,
+      loginAvailable: false,
+      username: null,
+      address: '192.168.1.20',
+    });
     render(<App client={createQueryClient()} />);
     expect(await screen.findByRole('heading', { name: 'Live' })).toBeTruthy();
     expect(await screen.findByText('kapi')).toBeTruthy();

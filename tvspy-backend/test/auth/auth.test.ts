@@ -29,7 +29,7 @@ describe('password hashing', () => {
   });
 });
 
-describe('admin account and sessions', () => {
+describe('password for other networks and sessions', () => {
   let db: DB;
   let now: number;
   let auth: AuthService;
@@ -41,28 +41,22 @@ describe('admin account and sessions', () => {
   });
 
   const setup = async () => {
-    const code = auth.pendingSetupCode() as string;
-    return auth.setup(code.toLowerCase().replace('-', ' '), 'Kacper', 'long enough pw', meta);
+    await auth.setPassword('Kacper', 'long enough pw');
+    return auth.login('kacper', 'long enough pw', meta);
   };
 
-  it('requires the setup code from the log to create the admin, once', async () => {
-    expect(auth.setupRequired()).toBe(true);
-    expect(auth.pendingSetupCode()).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
-    await expect(auth.setup('AAAA-AAAA', 'kacper', 'long enough pw', meta)).rejects.toMatchObject({
-      reason: 'bad_setup_code',
+  it('has no password until one is set, and can remove it again', async () => {
+    expect(auth.hasAdmin()).toBe(false);
+    await expect(auth.login('admin', 'anything at all', meta)).rejects.toMatchObject({
+      reason: 'bad_credentials',
     });
-    await expect(
-      auth.setup(auth.pendingSetupCode() as string, 'kacper', 'short', meta),
-    ).rejects.toMatchObject({
-      reason: 'weak_password',
-    });
+    await expect(auth.setPassword('kacper', 'short')).rejects.toMatchObject({ reason: 'weak_password' });
     const token = await setup();
-    expect(auth.setupRequired()).toBe(false);
-    expect(auth.pendingSetupCode()).toBeNull();
+    expect([auth.hasAdmin(), auth.adminName()]).toEqual([true, 'Kacper']);
     expect(auth.session(token)?.username).toBe('Kacper');
-    await expect(auth.setup('AAAA-AAAA', 'x', 'long enough pw', meta)).rejects.toMatchObject({
-      reason: 'already_set_up',
-    });
+    auth.removeAdmin();
+    expect(auth.hasAdmin()).toBe(false);
+    expect(auth.session(token)).toBeNull();
   });
 
   it('stores only a hash of the session token', async () => {
@@ -75,7 +69,7 @@ describe('admin account and sessions', () => {
 
   it('logs in case-insensitively by name and rejects wrong passwords', async () => {
     await setup();
-    expect(auth.session(await auth.login('kacper', 'long enough pw', meta))?.username).toBe('Kacper');
+    expect(auth.session(await auth.login('KACPER', 'long enough pw', meta))?.username).toBe('Kacper');
     await expect(auth.login('kacper', 'wrong password', meta)).rejects.toBeInstanceOf(AuthError);
     await expect(auth.login('someone', 'long enough pw', meta)).rejects.toMatchObject({
       reason: 'bad_credentials',
@@ -111,7 +105,7 @@ describe('admin account and sessions', () => {
     await auth.login('kacper', 'another long pw', meta);
   });
 
-  it('resets the account from the command line and logs everyone out', async () => {
+  it('replaces the password (from home or the command line) and logs everyone out', async () => {
     const token = await setup();
     await auth.setPassword('admin', 'recovered password');
     expect(auth.session(token)).toBeNull();

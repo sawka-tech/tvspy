@@ -54,7 +54,7 @@ export function harness(opts: HarnessOptions = {}) {
 
   let cookie: string | null = null;
   const call = async (method: string, path: string, o: CallOptions = {}) => {
-    const headers: Record<string, string> = { host: 'tvspy.local', ...o.headers };
+    const headers: Record<string, string> = { host: '192.168.1.10:8183', ...o.headers };
     if (o.csrf ?? true) headers['x-tvspy-csrf'] = '1';
     if (o.origin) headers.origin = o.origin;
     const body =
@@ -68,23 +68,17 @@ export function harness(opts: HarnessOptions = {}) {
     const env = {
       incoming: { socket: { remoteAddress: o.ip ?? '192.168.1.20' } },
     } as unknown as AppEnv['Bindings'];
-    const res = await services.app.request(`http://tvspy.local${path}`, { method, headers, body }, env);
+    const res = await services.app.request(`http://192.168.1.10:8183${path}`, { method, headers, body }, env);
     const set = res.headers.get('set-cookie');
     const m = set ? /tvspy_session=([^;]*)/.exec(set) : null;
     if (m) cookie = m[1] || null;
     return res;
   };
 
-  /** Creates the admin and keeps its session cookie for later calls. */
-  const login = async () => {
-    const code = services.auth.pendingSetupCode();
-    if (code) {
-      await call('POST', '/api/auth/setup', {
-        body: { setupCode: code, username: 'kacper', password: 'long enough pw' },
-      });
-    } else {
-      await call('POST', '/api/auth/login', { body: { username: 'kacper', password: 'long enough pw' } });
-    }
+  /** Sets the password from the LAN, then logs in from outside the trusted networks (keeps the cookie). */
+  const loginFromOutside = async (ip = '203.0.113.7') => {
+    await call('PUT', '/api/auth/password', { body: { username: 'kacper', newPassword: 'long enough pw' } });
+    await call('POST', '/api/auth/login', { body: { username: 'kacper', password: 'long enough pw' }, ip });
     return cookie;
   };
 
@@ -96,7 +90,7 @@ export function harness(opts: HarnessOptions = {}) {
     dataDir,
     clock,
     call,
-    login,
+    loginFromOutside,
     get cookie() {
       return cookie;
     },

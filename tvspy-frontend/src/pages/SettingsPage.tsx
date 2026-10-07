@@ -11,7 +11,9 @@ import { ApiError } from '../lib/api';
 import { formatBytes, formatDateTime } from '../lib/format';
 import {
   useAbout,
-  useChangePassword,
+  useAuth,
+  useRemovePassword,
+  useSavePassword,
   useSaveSettings,
   useSettings,
   useTestTelegram,
@@ -437,32 +439,44 @@ function MonitoringSection({ settings }: { settings: Settings }) {
   );
 }
 
-function AccountSection() {
-  const change = useChangePassword();
+function PasswordForm({ trusted, onDone }: { trusted: boolean; onDone: () => void }) {
+  const save = useSavePassword();
+  const [username, setUsername] = useState('');
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [repeat, setRepeat] = useState('');
   const mismatch = repeat !== '' && repeat !== next;
   return (
-    <Card title="Password" description="Changing it logs out every other browser.">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (mismatch) return;
-          change.mutate(
-            { currentPassword: current, newPassword: next },
-            {
-              onSuccess: () => {
-                setCurrent('');
-                setNext('');
-                setRepeat('');
-              },
-            },
-          );
-        }}
-        className="max-w-sm space-y-4"
-      >
-        <Field label="Current password" error={fieldError(change.error, 'currentPassword')}>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (mismatch) return;
+        save.mutate(
+          trusted
+            ? { ...(username.trim() ? { username: username.trim() } : {}), newPassword: next }
+            : { currentPassword: current, newPassword: next },
+          { onSuccess: onDone },
+        );
+      }}
+      className="mt-3 max-w-sm space-y-4"
+    >
+      {trusted ? (
+        <Field
+          label="Login name"
+          hint="Leave empty to keep the current one (or “admin”)"
+          error={fieldError(save.error, 'username')}
+        >
+          {(ids) => (
+            <TextInput
+              {...ids}
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          )}
+        </Field>
+      ) : (
+        <Field label="Current password" error={fieldError(save.error, 'currentPassword')}>
           {(ids) => (
             <TextInput
               {...ids}
@@ -474,45 +488,118 @@ function AccountSection() {
             />
           )}
         </Field>
+      )}
+      <Field label="New password" hint="At least 8 characters" error={fieldError(save.error, 'newPassword')}>
+        {(ids) => (
+          <TextInput
+            {...ids}
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+          />
+        )}
+      </Field>
+      <Field label="Repeat new password" error={mismatch ? 'The passwords differ' : undefined}>
+        {(ids) => (
+          <TextInput
+            {...ids}
+            type="password"
+            autoComplete="new-password"
+            required
+            value={repeat}
+            onChange={(e) => setRepeat(e.target.value)}
+          />
+        )}
+      </Field>
+      {save.error && !(save.error instanceof ApiError && Object.keys(save.error.fields).length) ? (
+        <ErrorNotice error={save.error} />
+      ) : null}
+      <div className="flex gap-2">
+        <Button type="submit" variant="primary" busy={save.isPending} disabled={mismatch || !next}>
+          Save password
+        </Button>
+        <Button variant="ghost" onClick={onDone}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function AccessSection({ settings }: { settings: Settings }) {
+  const auth = useAuth();
+  const remove = useRemovePassword();
+  const [nets, setNets] = useState(settings.access.openNetworks.join('\n'));
+  const [names, setNames] = useState(settings.access.hostnames.join('\n'));
+  const [editing, setEditing] = useState(false);
+  const { save, saved, submit } = useSection();
+  const next = { openNetworks: lines(nets), hostnames: lines(names).map((n) => n.toLowerCase()) };
+  const dirty = JSON.stringify(next) !== JSON.stringify(settings.access);
+  const a = auth.data;
+  const trusted = a?.trustedNetwork ?? false;
+  return (
+    <Card
+      title="Access"
+      description="Who can open tvspy. Viewers' addresses and your TVHeadend settings are visible here."
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit({ access: next });
+        }}
+        className="space-y-4"
+      >
         <Field
-          label="New password"
-          hint="At least 8 characters"
-          error={fieldError(change.error, 'newPassword')}
+          label="Opens without login from"
+          hint={`Your home network and VPN; one address or range per line.${a?.address ? ` This browser: ${a.address}.` : ''} Leave out 172.16.0.0/12, where Docker and the HTTPS proxy live.`}
+          error={fieldError(save.error, 'access.openNetworks')}
         >
           {(ids) => (
-            <TextInput
-              {...ids}
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={8}
-              value={next}
-              onChange={(e) => setNext(e.target.value)}
-            />
+            <TextArea {...ids} rows={rows(nets)} value={nets} onChange={(e) => setNets(e.target.value)} />
           )}
         </Field>
-        <Field label="Repeat new password" error={mismatch ? 'The passwords differ' : undefined}>
+        <Field
+          label="Host names"
+          hint="Only needed if you open tvspy by a name (such as tower.local) instead of its IP address. Other names get no free access, which keeps malicious websites out."
+          error={fieldError(save.error, 'access.hostnames')}
+        >
           {(ids) => (
-            <TextInput
-              {...ids}
-              type="password"
-              autoComplete="new-password"
-              required
-              value={repeat}
-              onChange={(e) => setRepeat(e.target.value)}
-            />
+            <TextArea {...ids} rows={rows(names)} value={names} onChange={(e) => setNames(e.target.value)} />
           )}
         </Field>
-        {change.error && !(change.error instanceof ApiError && Object.keys(change.error.fields).length) ? (
-          <ErrorNotice error={change.error} />
-        ) : null}
-        <div className="flex items-center gap-2">
-          <Button type="submit" variant="primary" busy={change.isPending} disabled={mismatch || !next}>
-            Change password
-          </Button>
-          {change.isSuccess && <span className="text-sm text-good-ink">Password changed</span>}
-        </div>
+        <SaveRow dirty={dirty} busy={save.isPending} saved={saved} error={save.error} />
       </form>
+
+      <div className="mt-5 border-t border-line pt-4">
+        <h3 className="text-sm font-medium text-ink">Password for other networks</h3>
+        <p className="mt-1 text-sm text-ink-2">
+          {a?.loginAvailable
+            ? 'Set. From other networks, tvspy asks for it.'
+            : 'Not set. tvspy does not open at all from other networks.'}
+        </p>
+        {editing ? (
+          <PasswordForm trusted={trusted} onDone={() => setEditing(false)} />
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => setEditing(true)}>
+              {a?.loginAvailable ? 'Change password' : 'Set a password'}
+            </Button>
+            {a?.loginAvailable && trusted && (
+              <Button size="sm" variant="danger" busy={remove.isPending} onClick={() => remove.mutate()}>
+                Remove password
+              </Button>
+            )}
+          </div>
+        )}
+        {remove.error ? (
+          <div className="mt-3">
+            <ErrorNotice error={remove.error} />
+          </div>
+        ) : null}
+      </div>
     </Card>
   );
 }
@@ -573,7 +660,7 @@ export function SettingsPage() {
           </div>
           <div className="space-y-5">
             <MonitoringSection settings={settings.data} />
-            <AccountSection />
+            <AccessSection settings={settings.data} />
             <AboutSection />
           </div>
         </div>

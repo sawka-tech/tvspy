@@ -7,7 +7,7 @@ import { isUnauthenticated } from './lib/api';
 import { keys, useAuth } from './lib/queries';
 import { ServerProvider } from './lib/server';
 import { AlertsPage } from './pages/AlertsPage';
-import { LoginPage, SetupPage } from './pages/AuthPages';
+import { LoginPage, NotAvailablePage } from './pages/AuthPages';
 import { HistoryPage } from './pages/HistoryPage';
 import { LivePage } from './pages/LivePage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -64,7 +64,7 @@ const router = createBrowserRouter([
   },
 ]);
 
-/** Shows setup, login or the app, depending on the session. */
+/** The app on trusted networks or after logging in; otherwise the login or a "home network only" page. */
 function AuthGate() {
   const auth = useAuth();
   if (auth.isPending) {
@@ -77,8 +77,13 @@ function AuthGate() {
       </div>
     );
   }
-  if (auth.data.setupRequired) return <SetupPage />;
-  if (!auth.data.authenticated) return <LoginPage />;
+  if (!auth.data.authenticated) {
+    return auth.data.loginAvailable ? (
+      <LoginPage address={auth.data.address} />
+    ) : (
+      <NotAvailablePage address={auth.data.address} />
+    );
+  }
   return (
     <ServerProvider>
       <RouterProvider router={router} />

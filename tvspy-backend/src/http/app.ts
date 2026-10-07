@@ -10,7 +10,7 @@ import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
 import { systemRoutes } from './routes/system.js';
 import { serveFrontend } from './static.js';
-import { ApiError, type AppDeps, type AppEnv } from './support.js';
+import { ApiError, type AppDeps, type AppEnv, clientAccess } from './support.js';
 
 export const CSRF_HEADER = 'x-tvspy-csrf';
 
@@ -88,14 +88,22 @@ export function createApp(d: AppDeps): Hono<AppEnv> {
   );
   app.route('/api/auth', authRoutes(d));
 
-  // Everything below requires a logged-in admin.
+  // Everything below: open from trusted networks, otherwise only after logging in with the password.
   app.use('/api/*', async (c, next) => {
+    const { trusted } = clientAccess(c, d);
     const token = getCookie(c, SESSION_COOKIE);
     const session = d.auth.session(token);
-    if (!session || !token) throw new ApiError(401, 'UNAUTHENTICATED', 'Please log in');
-    if (session.renewed) setSessionCookie(c, token);
-    c.set('username', session.username);
-    c.set('token', token);
+    if (!trusted && (!session || !token)) {
+      throw new ApiError(
+        401,
+        'UNAUTHENTICATED',
+        d.auth.hasAdmin() ? 'Please log in' : 'tvspy only opens from your home network',
+      );
+    }
+    if (session?.renewed && token) setSessionCookie(c, token);
+    c.set('trusted', trusted);
+    c.set('username', session?.username ?? null);
+    c.set('token', session ? (token ?? null) : null);
     return next();
   });
 
