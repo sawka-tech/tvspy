@@ -1,54 +1,37 @@
-# Etapa 1: Construcción del frontend
-FROM node:20.16.0-bookworm AS build-frontend
+# syntax=docker/dockerfile:1
 
-WORKDIR /app/frontend
+# Build: compile the backend.
+FROM node:24-bookworm-slim AS build
+WORKDIR /src
+COPY package.json package-lock.json .npmrc tsconfig.base.json ./
+COPY tvspy-backend/package.json tvspy-backend/
+RUN npm ci --no-audit --no-fund
+COPY tvspy-backend tvspy-backend
+RUN npm run build --workspace tvspy-backend
 
-# Copia los archivos de configuración y el código del frontend
-COPY tvspy-frontend/package*.json ./
-RUN npm install
-COPY tvspy-frontend/ ./
-RUN npm run build
+# Runtime dependencies only (better-sqlite3 ships prebuilt binaries; no compiler needed).
+FROM node:24-bookworm-slim AS prod-deps
+WORKDIR /src
+COPY package.json package-lock.json .npmrc ./
+COPY tvspy-backend/package.json tvspy-backend/
+RUN npm ci --omit=dev --workspace tvspy-backend --no-audit --no-fund
 
-# Etapa 2: Configuración del backend
-FROM node:20.16.0-bookworm AS build-backend
-
+FROM node:24-bookworm-slim
+ARG TVSPY_VERSION=4.0.0-dev
+ARG TVSPY_COMMIT=
+ENV NODE_ENV=production \
+    PORT=80 \
+    TZ=Europe/Warsaw \
+    TVSPY_DATA_DIR=/app/backend/src/database/file \
+    TVSPY_VERSION=${TVSPY_VERSION} \
+    TVSPY_COMMIT=${TVSPY_COMMIT}
 WORKDIR /app/backend
-
-# Copia los archivos de configuración y el código del backend
-COPY tvspy-backend/package*.json ./
-RUN npm install
-COPY tvspy-backend/ ./
-
-# Etapa 3: Imagen final con Nginx y Node.js
-FROM node:20.16.0-bookworm AS final
-
-# Instalar Nginx
-RUN apt update && apt install -y nginx && apt clean
-
-# Crear el usuario nginx para evitar errores
-RUN useradd -r -u 101 nginx
-
-# Configurar el directorio de trabajo
-WORKDIR /app
-
-# Configurar la zona horaria y localización
-ENV TZ=Europe/Madrid
-ENV LOCALE=es-ES
-
-# Copia el backend al contenedor
-COPY --from=build-backend /app/backend /app/backend
-
-# Copia los archivos estáticos generados del frontend al directorio de Nginx
-COPY --from=build-frontend /app/frontend/dist /usr/share/nginx/html
-
-# Copia la configuración personalizada de Nginx
-COPY nginx.conf /etc/nginx/nginx.conf
-
-# Asignar los permisos correctos a los archivos de Nginx
-RUN chown -R nginx:nginx /var/log/nginx /var/lib/nginx /usr/share/nginx/html
-
-# Exponer puertos para Nginx
+COPY --from=prod-deps /src/node_modules /app/node_modules
+COPY --from=build /src/tvspy-backend/dist ./dist
+COPY tvspy-backend/package.json ./package.json
+# Runs as root like the previous image: existing appdata is root-owned and the app binds port 80.
+RUN mkdir -p "$TVSPY_DATA_DIR"
 EXPOSE 80
-
-# Iniciar Nginx y el backend Node.js en el contenedor
-CMD ["sh", "-c", "nginx -g 'daemon off;' & node /app/backend/src/app.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||80)+'/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+CMD ["node", "dist/main.js"]

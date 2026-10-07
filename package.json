@@ -1,0 +1,23 @@
+{
+  "name": "tvspy",
+  "version": "4.0.0-dev",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "tvspy-backend"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "biome check .",
+    "format": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "typescript": "7.0.2"
+  }
+}

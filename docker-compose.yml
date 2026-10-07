@@ -1,13 +1,13 @@
+# Example; on Unraid the container is managed by its template instead.
 services:
   tvspy:
-    image: alebupal/tvspy:latest
-    restart: unless-stopped
+    image: ghcr.io/sawka-tech/tvspy:latest
     container_name: tvspy
-    volumes:
-      - ./tvspy:/var/www/html/bd_backup
-      - ./tvspy/img_canales:/app/img/canales #cachear imagen canales
+    restart: unless-stopped
     ports:
-      - 80:80
+      - 8183:80
+    volumes:
+      # Holds tvspy.db, backups and caches (and an old database.db, which is imported read-only).
+      - ./data:/app/backend/src/database/file
     environment:
-      - TZ=Europe/Madrid
-      - LOCALE=es-ES
+      - TZ=Europe/Warsaw
