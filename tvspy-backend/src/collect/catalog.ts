@@ -1,5 +1,6 @@
 // Channel and mux catalog from TVH (refreshed every 15 minutes): channel logos, channel → mux mapping,
-// mux frequency and whether a mux is monitored (enabled, with at least one enabled channel). Also the
+// mux frequency and whether a mux is monitored (an enabled antenna mux with at least one enabled channel;
+// IPTV "muxes" such as internet radio streams have no frequency and no reception to watch). Also the
 // newest service `last_seen` per mux, which TVH refreshes whenever it tunes the mux (e.g. the nightly
 // EPG grab): a quiet sign that reception still works when nobody watches.
 
@@ -113,7 +114,7 @@ export class Catalog {
           freq: m.frequency,
           delsys: m.delsys,
           enabled: m.enabled ? 1 : 0,
-          monitored: m.enabled && muxWithChannel.has(m.name) ? 1 : 0,
+          monitored: m.enabled && m.frequency !== null && muxWithChannel.has(m.name) ? 1 : 0,
           scanResult: m.scanResult,
           lastSeen: lastSeen.get(m.name) ?? null,
           now,
@@ -136,6 +137,12 @@ export class Catalog {
 
   mux(name: string | null): CatalogMux | undefined {
     return name ? this.muxes.get(name) : undefined;
+  }
+
+  /** IPTV and other non-antenna muxes (no frequency), as far as the catalog knows them. */
+  isIptvMux(name: string | null): boolean {
+    const m = this.mux(name);
+    return m !== undefined && m.freqMHz === null;
   }
 
   monitoredMuxes(): CatalogMux[] {

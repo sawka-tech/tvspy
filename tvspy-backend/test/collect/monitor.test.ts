@@ -11,6 +11,7 @@ import {
   input,
   startFakeTvh,
   subscription,
+  TUNER_A,
   TUNER_B,
 } from '../support/fakeTvh.js';
 import { type Harness, harness, T0 } from '../support/harness.js';
@@ -31,7 +32,11 @@ afterEach(async () => {
 describe('monitor against a TVHeadend', () => {
   it('reads streams, tuners, the catalog and logos with Digest auth', async () => {
     tvh.state.subscriptions = [subscription({ id: 5, start: T0 - 30, total_out: 2_000_000 })];
-    tvh.state.inputs = [input(), idleInput(TUNER_B)];
+    tvh.state.inputs = [
+      input(),
+      idleInput(TUNER_B),
+      input({ input: 'IPTV', stream: 'VOX FM in radio', snr: 0, snr_scale: 0, signal_scale: 0 }),
+    ];
     await h.monitor.pollSubscriptions();
     await h.monitor.pollServerInfo();
     await h.monitor.refreshCatalog();
@@ -39,11 +44,13 @@ describe('monitor against a TVHeadend', () => {
 
     expect(h.tvh).toMatchObject({ connected: true, version: '4.3-2345~gabcdef' });
     expect(h.tracker.open.size).toBe(1);
-    expect(h.tuners.snapshots(T0)).toHaveLength(2);
+    expect(h.tuners.snapshots(T0).map((t) => t.name)).toEqual([TUNER_A, TUNER_B]); // not the IPTV input
     expect(h.db.prepare('SELECT name, mux FROM channels ORDER BY name').all()).toEqual([
       { name: 'TVN', mux: '530MHz' },
       { name: 'TVP1', mux: '490MHz' },
+      { name: 'VOX FM', mux: 'VOX FM' },
     ]);
+    // The internet radio (IPTV, no frequency) has a channel but no reception to monitor.
     expect(h.catalog.monitoredMuxes().map((m) => [m.name, m.freqMHz])).toEqual([
       ['490MHz', 490],
       ['530MHz', 530],

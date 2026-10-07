@@ -16,7 +16,7 @@ import { type TvhClient, TvhError } from '../tvh/client.js';
 import type { Catalog } from './catalog.js';
 import type { DailyCounters } from './dailyCounters.js';
 import type { SessionTracker } from './sessions.js';
-import type { TunerMonitor } from './tuners.js';
+import { isIptvInput, type TunerMonitor } from './tuners.js';
 import type { TvhState } from './tvhState.js';
 
 export const RECEPTION_MINUTES_KEEP_DAYS = 90;
@@ -185,7 +185,11 @@ export class Monitor {
 
   async pollInputs(): Promise<void> {
     if (!this.d.tvh.connected) return;
-    this.d.tuners.update(await fetchInputs(this.d.client), this.now());
+    // Only antenna tuners: IPTV streams (internet radio) show up as inputs too.
+    const inputs = (await fetchInputs(this.d.client)).filter(
+      (i) => !isIptvInput(i.tuner) && !this.d.catalog.isIptvMux(i.mux),
+    );
+    this.d.tuners.update(inputs, this.now());
   }
 
   async pollServerInfo(): Promise<void> {

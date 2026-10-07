@@ -2,7 +2,7 @@ import { statSync } from 'node:fs';
 import type { About, Alerts, Live, Lookups, Status, Tuner, Tuners } from '@tvspy/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { USER_WEIGHT } from '../../collect/tuners.js';
+import { isIptvInput, USER_WEIGHT } from '../../collect/tuners.js';
 import { getMeta } from '../../db/meta.js';
 import { schemaVersion } from '../../db/migrate.js';
 import { liveSession, muxRef, tunerLabel, tvhStateDto } from '../mappers.js';
@@ -60,7 +60,9 @@ export function systemRoutes(d: AppDeps): Hono<AppEnv> {
     const known = d.db
       .prepare('SELECT name FROM tuners WHERE last_seen >= ? ORDER BY name')
       .all(now - FORGET_TUNERS_SEC) as { name: string }[];
-    const names = [...new Set([...known.map((k) => k.name), ...live.keys()])].sort();
+    const names = [...new Set([...known.map((k) => k.name), ...live.keys()])]
+      .filter((n) => !isIptvInput(n))
+      .sort();
     const tuners: Tuner[] = names.map((name) => {
       const snap = live.get(name);
       if (!snap) {

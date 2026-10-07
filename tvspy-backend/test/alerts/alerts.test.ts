@@ -335,12 +335,13 @@ describe('alert rules', () => {
 describe('message formatting', () => {
   it('escapes HTML and formats durations', () => {
     expect(escapeHtml(`<a href="x">&</a>`)).toBe('&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;');
-    expect([45, 60, 3600, 3720, 100_000].map(formatDuration)).toEqual([
+    expect([45, 60, 3600, 3720, 100_000, 8_035_200].map(formatDuration)).toEqual([
       '45 s',
       '1 min',
       '1 h',
       '1 h 2 min',
       '27 h 46 min',
+      '93 d',
     ]);
   });
 });

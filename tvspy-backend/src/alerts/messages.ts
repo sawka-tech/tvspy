@@ -11,6 +11,7 @@ export function formatDuration(sec: number): string {
   const m = Math.floor(s / 60);
   if (m < 60) return `${m} min`;
   const h = Math.floor(m / 60);
+  if (h >= 48) return h % 24 ? `${Math.floor(h / 24)} d ${h % 24} h` : `${Math.floor(h / 24)} d`;
   const rest = m % 60;
   return rest ? `${h} h ${rest} min` : `${h} h`;
 }

@@ -120,6 +120,14 @@ export function catalogFixture(): Pick<FakeTvhState, 'channels' | 'services' | '
         icon_public_url: 'imagecache/2',
         services: ['s2'],
       },
+      // An internet radio on an IPTV network, like the real setup: a channel, but no antenna mux.
+      {
+        uuid: 'c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3',
+        name: 'VOX FM',
+        number: 101,
+        enabled: true,
+        services: ['s3'],
+      },
     ],
     services: [
       {
@@ -137,6 +145,14 @@ export function catalogFixture(): Pick<FakeTvhState, 'channels' | 'services' | '
         svcname: 'TVN',
         enabled: true,
         last_seen: 1_789_990_000,
+      },
+      {
+        uuid: 's3',
+        multiplex: 'VOX FM',
+        network: 'radio',
+        svcname: 'VOX FM',
+        enabled: true,
+        last_seen: 1_780_000_000,
       },
     ],
     muxes: [
@@ -166,6 +182,14 @@ export function catalogFixture(): Pick<FakeTvhState, 'channels' | 'services' | '
         delsys: 'DVB-T2',
         enabled: 0,
         scan_result: 2,
+      },
+      {
+        uuid: 'm4',
+        name: 'VOX FM',
+        network: 'radio',
+        enabled: 1,
+        scan_result: 1,
+        iptv_url: 'http://radio.example/vox',
       },
     ],
     images: {

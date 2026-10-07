@@ -6,6 +6,9 @@ import type { DB } from '../db/open.js';
 
 /** Weight of the strongest subscription on a tuner: user streams and recordings are >= 10, EPG grab/scans <= 7. */
 export const USER_WEIGHT = 10;
+
+/** TVH lists IPTV (internet streams) as an input named "IPTV" while one plays; it is not a tuner. */
+export const isIptvInput = (name: string) => /^IPTV\b/i.test(name.trim());
 const HISTORY_SEC = 15 * 60;
 
 export interface TunerSnapshot {
