@@ -40,6 +40,7 @@ export function systemRoutes(d: AppDeps): Hono<AppEnv> {
       telegram: {
         enabled: d.telegramAllowed && d.settings.get('telegram.enabled'),
         configured: d.settings.isSet('telegram.botToken') && d.settings.get('telegram.chatId') !== '',
+        blocked: d.outbox.blockedReason(),
       },
     };
     return c.json(body);
@@ -132,10 +133,12 @@ export function systemRoutes(d: AppDeps): Hono<AppEnv> {
       .get() as { n: number; first: number | null; legacy: number | null };
     const file = d.db.name;
     let sizeBytes = 0;
-    try {
-      sizeBytes = statSync(file).size;
-    } catch {
-      sizeBytes = 0;
+    for (const f of [file, `${file}-wal`]) {
+      try {
+        sizeBytes += statSync(f).size;
+      } catch {
+        // No such file (in-memory database, or no WAL right now).
+      }
     }
     const legacy = getMeta(d.db, 'legacy_import');
     const legacyAt = legacy ? (JSON.parse(legacy) as { at: number }).at : null;

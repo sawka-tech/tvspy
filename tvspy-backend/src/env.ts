@@ -6,6 +6,8 @@ export interface Env {
   /** Holds tvspy.db, backups and caches; the legacy database.db lives here too on Unraid. */
   dataDir: string;
   port: number;
+  /** Address to listen on; all interfaces when unset (inside the container). */
+  host: string | undefined;
   tz: string;
   logLevel: LogLevel;
   journal: 'wal' | 'delete';
@@ -28,12 +30,13 @@ export function readEnv(e: NodeJS.ProcessEnv = process.env): Env {
   return {
     dataDir: e.TVSPY_DATA_DIR || DEFAULT_DATA_DIR,
     port: Number.isInteger(port) && port > 0 && port < 65536 ? port : 80,
+    host: e.TVSPY_HOST || undefined,
     tz: e.TZ && isValidTimeZone(e.TZ) ? e.TZ : DEFAULT_TZ,
     logLevel: (['debug', 'info', 'warn', 'error'].includes(level) ? level : 'info') as LogLevel,
     journal: e.TVSPY_SQLITE_JOURNAL === 'delete' ? 'delete' : 'wal',
     telegramEnabled: e.TVSPY_TELEGRAM !== 'off',
     version: e.TVSPY_VERSION || '4.0.0-dev',
-    commit: e.TVSPY_COMMIT || null,
+    commit: e.TVSPY_COMMIT ? e.TVSPY_COMMIT.slice(0, 7) : null,
     publicDir: e.TVSPY_PUBLIC_DIR || null,
     logLevelFromEnv: Boolean(e.LOG_LEVEL),
   };

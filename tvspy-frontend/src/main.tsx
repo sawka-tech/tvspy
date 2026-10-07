@@ -1,18 +1,16 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { BrowserRouter as Router } from 'react-router-dom';
-import App from './App';
-import './css/style.css';
-import './css/custom.css';
-import './css/satoshi.css';
-import 'jsvectormap/dist/jsvectormap.css';
-import 'flatpickr/dist/flatpickr.min.css';
-import './i18n';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { App, createQueryClient } from './App';
+import { applyTheme, storedTheme } from './lib/theme';
+import './styles.css';
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <Router>
-      <App />
-    </Router>
-  </React.StrictMode>,
-);
+applyTheme(storedTheme());
+
+const root = document.getElementById('root');
+if (root) {
+  createRoot(root).render(
+    <StrictMode>
+      <App client={createQueryClient()} />
+    </StrictMode>,
+  );
+}

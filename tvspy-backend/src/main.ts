@@ -80,7 +80,7 @@ async function main(): Promise<void> {
   if (services.tracker.open.size > 0) log.info(`Resuming ${services.tracker.open.size} open session(s)`);
 
   services.monitor.start();
-  const server = serve({ fetch: services.app.fetch, port: env.port }, (info) =>
+  const server = serve({ fetch: services.app.fetch, port: env.port, hostname: env.host }, (info) =>
     log.info(`Listening on port ${info.port}`),
   );
 

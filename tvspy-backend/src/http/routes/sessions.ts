@@ -39,6 +39,8 @@ const query = z.object({
   minSec: z.coerce.number().int().min(0).max(86_400).optional(),
   q: text.optional(),
   visit: z.coerce.number().int().min(1).optional(),
+  /** Only finished sessions (the live view lists the running ones). */
+  ended: z.enum(['1', 'true']).optional(),
 });
 
 const likeEscape = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
@@ -67,6 +69,7 @@ export function sessionRoutes(d: AppDeps): Hono<AppEnv> {
     if (q.to) add('s.start_day <= ?', q.to);
     if (q.minSec !== undefined) add(`${DURATION} >= ?`, q.minSec);
     if (q.visit !== undefined) add('s.visit_id = ?', q.visit);
+    if (q.ended) where.push('s.ended_at IS NOT NULL');
     if (q.q) {
       const like = `%${likeEscape(q.q)}%`;
       add(

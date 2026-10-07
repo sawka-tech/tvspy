@@ -75,7 +75,7 @@ export function liveSession(s: TrackedSession, catalog: Catalog): LiveSession {
     user: s.username,
     channel: channelRef(catalog, s.channel),
     mux: muxRef(catalog, s.mux),
-    tuner: s.tuner,
+    tuner: s.tuner ? tunerLabel(s.tuner) : null,
     app: appInfo(s),
     source: source(s.ip, s.route, null),
     startedAt: isoNow(s.startedAt),
@@ -120,7 +120,7 @@ export function sessionRow(r: SessionDbRow, catalog: Catalog): SessionRow {
     user: r.username,
     channel: channelRef(catalog, r.channel),
     mux: muxRef(catalog, r.mux),
-    tuner: r.tuner,
+    tuner: r.tuner ? tunerLabel(r.tuner) : null,
     app: appInfo({
       app: r.app,
       appVersion: r.app_version,

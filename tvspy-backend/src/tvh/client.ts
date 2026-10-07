@@ -46,6 +46,12 @@ interface DigestState {
 
 const md5 = (s: string) => createHash('md5').update(s).digest('hex');
 
+/** The useful part of a failed fetch: ECONNREFUSED, ENOTFOUND, "bad port", … */
+export function networkReason(err: unknown): string {
+  const cause = (err as { cause?: { code?: string; message?: string; errors?: { code?: string }[] } }).cause;
+  return cause?.code ?? cause?.errors?.[0]?.code ?? cause?.message ?? (err as Error).message;
+}
+
 /** Parses the first challenge of a WWW-Authenticate header. */
 export function parseChallenge(header: string | null): Challenge | null {
   if (!header) return null;
@@ -174,8 +180,7 @@ export class TvhClient {
       if (err instanceof DOMException && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
         throw new TvhError('timeout', `TVHeadend did not answer within ${Math.round(timeoutMs / 1000)} s`);
       }
-      const cause = (err as { cause?: { code?: string } }).cause;
-      throw new TvhError('network', `Cannot reach TVHeadend (${cause?.code ?? (err as Error).message})`);
+      throw new TvhError('network', `Cannot reach TVHeadend (${networkReason(err)})`);
     }
   }
 }

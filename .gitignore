@@ -176,3 +176,5 @@ yarn-error.log*
 
 /template/*.zip
 /template/template
+# Local development data (tvspy.db, backups, logo cache)
+.data/

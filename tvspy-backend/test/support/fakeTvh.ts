@@ -184,7 +184,7 @@ function params(header: string): Record<string, string> {
   return out;
 }
 
-export async function startFakeTvh(init: Partial<FakeTvhState> = {}): Promise<FakeTvh> {
+export async function startFakeTvh(init: Partial<FakeTvhState> = {}, listenPort = 0): Promise<FakeTvh> {
   const nonces = new Set<string>();
   const state: FakeTvhState = {
     auth: 'digest',
@@ -277,7 +277,7 @@ export async function startFakeTvh(init: Partial<FakeTvhState> = {}): Promise<Fa
     res.writeHead(404).end();
   });
 
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve) => server.listen(listenPort, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   return {
     url: `http://127.0.0.1:${port}`,

@@ -72,6 +72,8 @@ jobs:
           done
           docker logs tvspy-ci
           curl -fsS http://127.0.0.1:8080/api/health
+          curl -fsS http://127.0.0.1:8080/ | grep -q '<div id="root">'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/status)" = 401
           size=$(docker image inspect tvspy:ci --format '{{.Size}}')
           echo "image size: $((size / 1024 / 1024)) MiB"
           test "$size" -lt 400000000

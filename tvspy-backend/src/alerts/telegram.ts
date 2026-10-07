@@ -1,5 +1,7 @@
 // Telegram Bot API client. The token is part of the URL path, so errors never include the URL.
 
+import { networkReason } from '../tvh/client.js';
+
 export type SendResult =
   | { ok: true }
   | { ok: false; message: string; permanent: boolean; retryAfterSec: number | null };
@@ -33,12 +35,11 @@ export async function sendTelegram(
     });
   } catch (err) {
     const timeout = err instanceof DOMException && err.name === 'TimeoutError';
-    const code = (err as { cause?: { code?: string } }).cause?.code;
     return {
       ok: false,
       message: timeout
         ? 'Telegram did not answer within 10 s'
-        : `Cannot reach Telegram (${code ?? 'network error'})`,
+        : `Cannot reach Telegram (${networkReason(err)})`,
       permanent: false,
       retryAfterSec: null,
     };

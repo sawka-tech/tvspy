@@ -1,85 +1,95 @@
-import { useEffect, useState } from 'react';
-import { Route, Routes, useLocation } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { DebugProvider } from './context/DebugContext';
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createBrowserRouter, Link, useRouteError } from 'react-router';
+import { RouterProvider } from 'react-router/dom';
+import { Layout } from './components/Layout';
+import { EmptyState, ErrorNotice } from './components/ui/Feedback';
+import { isUnauthenticated } from './lib/api';
+import { keys, useAuth } from './lib/queries';
+import { ServerProvider } from './lib/server';
+import { AlertsPage } from './pages/AlertsPage';
+import { LoginPage, SetupPage } from './pages/AuthPages';
+import { HistoryPage } from './pages/HistoryPage';
+import { LivePage } from './pages/LivePage';
+import { SettingsPage } from './pages/SettingsPage';
 
-import Loader from './common/Loader';
-import PageTitle from './components/PageTitle';
-import Home from './pages/Home';
-import Settings from './pages/Settings';
-import User from './pages/User';
-import Channel from './pages/Channel';
-import Registry from './pages/Registry';
-import DefaultLayout from './layout/DefaultLayout';
+export function createQueryClient(): QueryClient {
+  // Any 401 means the session ended (expired, logged out elsewhere): show the login again.
+  const onError = (err: unknown) => {
+    if (isUnauthenticated(err)) void client.invalidateQueries({ queryKey: keys.auth });
+  };
+  const client: QueryClient = new QueryClient({
+    queryCache: new QueryCache({ onError }),
+    mutationCache: new MutationCache({ onError }),
+    defaultOptions: {
+      queries: {
+        retry: (count, err) => !isUnauthenticated(err) && count < 2,
+        refetchOnWindowFocus: true,
+        staleTime: 2_000,
+      },
+    },
+  });
+  return client;
+}
 
-function App() {
-  const [loading, setLoading] = useState<boolean>(true);
-  const { pathname } = useLocation();
-  const { t } = useTranslation();
-
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [pathname]);
-
-  useEffect(() => {
-    setTimeout(() => setLoading(false), 1000);
-  }, []);
-
-  return loading ? (
-    <Loader />
-  ) : (
-    <DebugProvider>
-      <DefaultLayout>
-        <Routes>
-          <Route
-            index
-            element={
-              <>
-                <PageTitle title={`${t('Home')} - TVSpy`} />
-                <Home />
-              </>
-            }
-          />
-          <Route
-            path="/registry"
-            element={
-              <>
-                <PageTitle title={`${t('Registry')} - TVSpy`} />
-                <Registry />
-              </>
-            }
-          />
-          <Route
-            path="/channels"
-            element={
-              <>
-                <PageTitle title={`${t('Channels')} - TVSpy`} />
-                <Channel />
-              </>
-            }
-          />
-          <Route
-            path="/users"
-            element={
-              <>
-                <PageTitle title={`${t('Users')} - TVSpy`} />
-                <User />
-              </>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <>
-                <PageTitle title={`${t('Settings')} - TVSpy`} />
-                <Settings />
-              </>
-            }
-          />
-        </Routes>
-      </DefaultLayout>
-    </DebugProvider>
+function RouteError() {
+  const error = useRouteError();
+  return (
+    <div className="mx-auto max-w-xl p-6">
+      <ErrorNotice error={error} onRetry={() => window.location.reload()} />
+    </div>
   );
 }
 
-export default App;
+function NotFound() {
+  return (
+    <EmptyState title="Page not found">
+      <Link to="/" className="font-medium text-accent-ink hover:underline">
+        Back to Live
+      </Link>
+    </EmptyState>
+  );
+}
+
+const router = createBrowserRouter([
+  {
+    element: <Layout />,
+    errorElement: <RouteError />,
+    children: [
+      { index: true, element: <LivePage /> },
+      { path: 'history', element: <HistoryPage /> },
+      { path: 'alerts', element: <AlertsPage /> },
+      { path: 'settings', element: <SettingsPage /> },
+      { path: '*', element: <NotFound /> },
+    ],
+  },
+]);
+
+/** Shows setup, login or the app, depending on the session. */
+function AuthGate() {
+  const auth = useAuth();
+  if (auth.isPending) {
+    return <div className="flex min-h-screen items-center justify-center text-sm text-ink-2">Loading…</div>;
+  }
+  if (auth.error) {
+    return (
+      <div className="mx-auto max-w-xl p-6">
+        <ErrorNotice error={auth.error} onRetry={() => void auth.refetch()} />
+      </div>
+    );
+  }
+  if (auth.data.setupRequired) return <SetupPage />;
+  if (!auth.data.authenticated) return <LoginPage />;
+  return (
+    <ServerProvider>
+      <RouterProvider router={router} />
+    </ServerProvider>
+  );
+}
+
+export function App({ client }: { client: QueryClient }) {
+  return (
+    <QueryClientProvider client={client}>
+      <AuthGate />
+    </QueryClientProvider>
+  );
+}

@@ -159,9 +159,11 @@ export class Monitor {
       const wasConnected = tvh.connected;
       tvh.markOk(now);
       if (!wasConnected) {
-        log.info(`Connected to TVHeadend${tvh.version ? ` ${tvh.version}` : ''}`);
+        log.info('Connected to TVHeadend');
         this.lastError.delete('subscriptions');
-        if (this.d.catalog.loadedAt === 0) this.loops.get('catalog')?.trigger();
+        // (Re)connected, possibly to another server: refresh what only changes slowly.
+        this.loops.get('serverinfo')?.trigger();
+        this.loops.get('catalog')?.trigger();
       }
       tracker.update(subs, now);
       alerts.onPoll(now);
@@ -188,7 +190,9 @@ export class Monitor {
 
   async pollServerInfo(): Promise<void> {
     if (!this.d.tvh.connected) return;
-    this.d.tvh.version = (await fetchServerInfo(this.d.client)).version;
+    const { version } = await fetchServerInfo(this.d.client);
+    if (version !== this.d.tvh.version) this.d.log.info(`TVHeadend version ${version ?? 'unknown'}`);
+    this.d.tvh.version = version;
   }
 
   async refreshCatalog(): Promise<void> {

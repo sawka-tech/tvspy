@@ -5,7 +5,8 @@
   "type": "module",
   "workspaces": [
     "shared",
-    "tvspy-backend"
+    "tvspy-backend",
+    "tvspy-frontend"
   ],
   "engines": {
     "node": ">=24"

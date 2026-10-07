@@ -77,7 +77,8 @@ export interface Status {
   tvh: TvhState;
   tuners: { inUse: number; detected: number; expected: number };
   activeStreams: number;
-  telegram: { enabled: boolean; configured: boolean };
+  /** blocked: why messages are not sent right now (switched off, not configured, …), or null. */
+  telegram: { enabled: boolean; configured: boolean; blocked: string | null };
 }
 
 export interface ChannelRef {

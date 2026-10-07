@@ -1,5 +1,20 @@
 # Changelog TVSPY
 
+## [4.0.0] - unreleased
+
+A rewrite in TypeScript (backend: Hono and SQLite; frontend: React), shipped as one smaller container.
+
+- Login for a single admin, set up with a code from the container log.
+- Live view with logos, multiplex, tuner, app and device, connection type and data rate, plus each tuner's
+  reception (signal-to-noise) over the last 15 minutes.
+- History with server-side filters and paging; channel changes count as one visit.
+- Telegram alerts for TVHeadend down or rejecting the login and for a multiplex without reception, besides
+  the existing start/stop/long-viewing messages. Fixed texts; every event at most once.
+- Reception, usage and concurrency statistics collected from the first day for the coming statistics pages.
+- Read-only import of the 3.x database with repaired session lengths; the old file stays untouched.
+- Nightly backups, a password reset command, and strict security headers. Secrets are never sent to the browser.
+- English only.
+
 ## [3.0.4] - 2025-03-24
 
 - Support for arm32/v7
