@@ -74,6 +74,7 @@ export const migration001: Migration = {
       CREATE INDEX sessions_user ON sessions (username, started_at);
       CREATE INDEX sessions_channel ON sessions (channel, started_at);
       CREATE INDEX sessions_visit ON sessions (visit_id);
+      CREATE INDEX sessions_mux ON sessions (mux, last_seen_at);
 
       -- One row per session and local hour: exact per-day watch time and data, any dimension via a join.
       CREATE TABLE usage_hourly (

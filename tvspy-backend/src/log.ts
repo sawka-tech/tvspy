@@ -20,9 +20,11 @@ export interface Logger {
   error(msg: string, err?: unknown): void;
   /** Most recent lines, oldest first (already redacted). */
   recent(): string[];
+  setLevel(level: LogLevel): void;
 }
 
-export function createLogger(level: LogLevel, keep = 500): Logger {
+export function createLogger(initial: LogLevel, keep = 500): Logger {
+  let level = initial;
   const lines: string[] = [];
   const write = (lvl: LogLevel, msg: string) => {
     if (ORDER[lvl] < ORDER[level]) return;
@@ -38,5 +40,8 @@ export function createLogger(level: LogLevel, keep = 500): Logger {
     error: (m, err) =>
       write('error', err === undefined ? m : `${m}: ${err instanceof Error ? err.message : String(err)}`),
     recent: () => [...lines],
+    setLevel: (l) => {
+      level = l;
+    },
   };
 }

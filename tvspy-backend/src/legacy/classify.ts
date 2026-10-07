@@ -49,13 +49,7 @@ export function normalizeUsername(name: string | null): string | null {
   return !s || s === 'No user' ? null : s;
 }
 
-/** A stream that ran this long but delivered less than this volume failed to start. */
-export const FAILED_MIN_SECONDS = 8;
-export const FAILED_MAX_BYTES = 64 * 1024;
-
-export function outcomeOf(durationSec: number, bytes: number): 'ok' | 'failed' {
-  return durationSec >= FAILED_MIN_SECONDS && bytes < FAILED_MAX_BYTES ? 'failed' : 'ok';
-}
+export { FAILED_MAX_BYTES, FAILED_MIN_SECONDS, outcomeOf } from '../core/outcome.js';
 
 export interface BitrateSample {
   channel: string | null;

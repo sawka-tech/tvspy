@@ -13,6 +13,10 @@ export interface Env {
   telegramEnabled: boolean;
   version: string;
   commit: string | null;
+  /** Built frontend served at /; null serves only the API (development). */
+  publicDir: string | null;
+  /** True when LOG_LEVEL was given explicitly (it then wins over the stored setting). */
+  logLevelFromEnv: boolean;
 }
 
 export const DEFAULT_DATA_DIR = '/app/backend/src/database/file';
@@ -30,5 +34,7 @@ export function readEnv(e: NodeJS.ProcessEnv = process.env): Env {
     telegramEnabled: e.TVSPY_TELEGRAM !== 'off',
     version: e.TVSPY_VERSION || '4.0.0-dev',
     commit: e.TVSPY_COMMIT || null,
+    publicDir: e.TVSPY_PUBLIC_DIR || null,
+    logLevelFromEnv: Boolean(e.LOG_LEVEL),
   };
 }

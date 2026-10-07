@@ -1,0 +1,12 @@
+{
+  "name": "@tvspy/shared",
+  "version": "4.0.0-dev",
+  "private": true,
+  "type": "module",
+  "types": "./api.ts",
+  "exports": {
+    ".": {
+      "types": "./api.ts"
+    }
+  }
+}
