@@ -9,5 +9,6 @@ export const API_ENDPOINTS = {
   CONFIG:          `${API_BASE_URL}/config`,
   CONFIG_LANGUAGE: `${API_BASE_URL}/config/language`,
   DEBUG_MODE:      `${API_BASE_URL}/config/debug_mode`,
-  STATISTICS:      `${API_BASE_URL}/statistics`
+  STATISTICS:      `${API_BASE_URL}/statistics`,
+  LIVE:            `${API_BASE_URL}/live`
 };

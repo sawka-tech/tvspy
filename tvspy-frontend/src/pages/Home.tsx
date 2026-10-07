@@ -20,7 +20,8 @@ interface SubscriptionMessage {
   in: number;
   out: number;
   total_in: number;
-  notificationClass: 'subscriptions';
+  start?: number;
+  errors?: number;
 }
 
 interface Registry {
@@ -30,10 +31,6 @@ interface Registry {
   start: string;
   client: string;
 }
-
-type MessageType = {
-  messages: SubscriptionMessage[];
-};
 
 type Statistics = {
   topChannels: { channel: string, total_time_seconds: number, count: number }[];
@@ -50,7 +47,7 @@ const Home: React.FC = () => {
   const [statistics, setStatistics] = useState<Statistics | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [wsServerUrl, setWsServerUrl] = useState<string>('');
+  const [liveError, setLiveError] = useState<string | null>(null);
   const [totalBandwidth, setTotalBandwidth] = useState<number>(0);
   const [totalConsumed, setTotalConsumed] = useState<number>(0);
   const [ipAllowed, setIpAllowed] = useState<string>('');
@@ -65,35 +62,6 @@ const Home: React.FC = () => {
   };
 
   useEffect(() => {
-    const fetchWsServerUrl = async () => {
-      try {
-        const names = ['port', 'username', 'hostname', 'password'];
-        const response = await axios.post(`${API_ENDPOINTS.CONFIG}/multiple`, { names });
-
-        if (debugMode) {
-          console.log('Home - fetchWsServerUrl - names', names);
-          console.log('Home - fetchWsServerUrl', response);
-        }
-
-        const config = response.data.reduce((acc, item) => {
-          acc[item.name] = item.value;
-          return acc;
-        }, {} as Record<string, string | undefined>);
-  
-        const { port, username, hostname, password } = config;
-  
-        if (port && username && hostname && password) {
-          const url = `ws://${username}:${password}@${hostname}:${port}/comet/ws`;
-          setWsServerUrl(url);
-        } else {
-          throw new Error(t('Missing one or more values required to connect with TVHeadend'));
-        }
-      } catch (err) {
-        setError(err as Error);
-        setLoading(false);
-      }
-    };
-  
     const fetchIpAllowed = async () => {
       try {
         const response = await axios.get(`${API_ENDPOINTS.CONFIG}/ip_allowed`);
@@ -108,7 +76,6 @@ const Home: React.FC = () => {
       }
     };
   
-    fetchWsServerUrl();
     fetchIpAllowed();
   }, []);
 
@@ -137,68 +104,41 @@ const Home: React.FC = () => {
   }, [type, daysAgo]);
 
   useEffect(() => {
-    if (!wsServerUrl) return;
+    let cancelled = false;
 
-    const socket = new WebSocket(wsServerUrl, ['tvheadend-comet']);
-
-    socket.onopen = () => {
-      if (debugMode) {
-        console.log('WebSocket', 'Conectado al servidor');
-      }
-    };
-
-    socket.onmessage = (event) => {
+    // The backend keeps the TVHeadend connection; the page polls its snapshot,
+    // so the browser never needs the TVHeadend credentials.
+    const fetchLive = async () => {
       try {
-        const data: MessageType = JSON.parse(event.data);
+        const response = await axios.get(API_ENDPOINTS.LIVE);
+        if (cancelled) return;
 
         if (debugMode) {
-          console.log('WebSocket - event', event);
-          console.log('WebSocket - data', data);
+          console.log('Home - fetchLive', response.data);
         }
 
-        let subscriptionMessages: SubscriptionMessage[] = [];
-        subscriptionMessages = data.messages.filter(
-          (msg): msg is SubscriptionMessage => msg.notificationClass === 'subscriptions'
-        );
-
-        if (debugMode) {
-          console.log('WebSocket - subscriptionMessages', subscriptionMessages);
-        }
-
-        setMessages(subscriptionMessages.length > 0 ? subscriptionMessages : []);
+        const subscriptions: SubscriptionMessage[] = response.data.subscriptions || [];
+        setMessages(subscriptions);
 
         // Calcular la suma de los bandwidths
-        const totalIn = subscriptionMessages.reduce((sum, msg) => sum + (msg.in || 0), 0);
-        const totalTotalIn = subscriptionMessages.reduce((sum, msg) => sum + (msg.total_in || 0), 0);
+        setTotalBandwidth(subscriptions.reduce((sum, msg) => sum + (msg.in || 0), 0));
+        setTotalConsumed(subscriptions.reduce((sum, msg) => sum + (msg.total_in || 0), 0));
 
-        setTotalBandwidth(totalIn);
-        setTotalConsumed(totalTotalIn);
-
-        setLoading(false);
-      } catch (error) {
-        console.error('WebSocket - Error al analizar el mensaje:', error);
-        setError(error as Error);
-        setLoading(false);
+        setLiveError(response.data.connected ? null : response.data.lastError);
+      } catch (err) {
+        if (!cancelled) setLiveError((err as Error).message);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
 
-    socket.onerror = (event) => {
-      console.error('WebSocket - Error:', event);
-      setError(new Error('Error en la conexión WebSocket'));
-      setLoading(false);
-    };
-
-    socket.onclose = () => {
-      console.log('WebSocket - Conexión cerrada');
-      setLoading(false);
-    };
-
+    fetchLive();
+    const timer = setInterval(fetchLive, 3000);
     return () => {
-      if (socket) {
-        socket.close();
-      }
+      cancelled = true;
+      clearInterval(timer);
     };
-  }, [wsServerUrl]);
+  }, [debugMode]);
 
   const handleTypeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setType(event.target.value as 'time' | 'uses');
@@ -220,6 +160,10 @@ const Home: React.FC = () => {
           ) : error ? (
             <div className="text-red-500">
               {t('Error')} {error.message}
+            </div>
+          ) : liveError ? (
+            <div className="text-red-500">
+              {t('Error')} {liveError}
             </div>
           ) : (
             <>
